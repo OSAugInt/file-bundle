@@ -1,5 +1,6 @@
 # FileBundle
 
+!![Rust CI](https://github.com/OSAugInt/file-bundle/workflows/Rust%20CI/badge.svg)
 FileBundle is a command-line utility written in Rust that allows you to bundle multiple files into a single output file. It provides flexible options for file selection, output customization, and supports complex glob patterns for inclusion and exclusion of files.
 
 ## Features
