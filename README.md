@@ -23,7 +23,7 @@ cd file-bundle
 cargo build --release
 ```
 
-The compiled binary will be available in `target/release/fbundle.
+The compiled binary will be available in `target/release/fbundle`.
 
 ## Usage
 
