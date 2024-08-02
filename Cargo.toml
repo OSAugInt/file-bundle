@@ -1,0 +1,10 @@
+[package]
+name = "fbundle"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.3", features = ["derive"] }
+glob = "0.3"
+ignore = "0.4"
+serde = { version = "1.0", features = ["derive"] }
