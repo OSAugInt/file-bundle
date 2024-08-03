@@ -41,16 +41,16 @@ DESCRIPTION:
 
 EXAMPLES:
     1. Bundle all .txt files in the current directory:
-       fbundle -g '*.txt'
+       fbundle -f '---' -g '*.txt'
 
     2. Bundle .rs files, excluding test files, from a specific directory:
-       fbundle -s ./src -g '**/*.rs' -g '!**/*_test.rs'
+       fbundle -s ./src -f '---' -g '**/*.rs' -g '!**/*_test.rs'
 
     3. Create a bundle with a custom name and separator:
        fbundle -n 'my_bundle' -f '---FILE---' -g '**/*.md'
 
     4. Bundle files with multiple include and exclude patterns:
-       fbundle -g '**/*.{js,ts}' -g '!**/node_modules/**' -g '!**/dist/**'
+       fbundle -f '---' -g '**/*.{js,ts}' -g '!**/node_modules/**' -g '!**/dist/**'
 
 NOTE:
     Glob patterns are case-insensitive by default. The tool uses the 'ignore' crate for
