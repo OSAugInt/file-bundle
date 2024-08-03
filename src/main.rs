@@ -69,8 +69,10 @@ struct FileBundle {
 }
 
 fn main() -> io::Result<()> {
-    let args = FileBundle::parse();
+    let mut args = FileBundle::parse();
     
+    args.file_sep = args.file_sep.replace("\\n", "\n");
+
     let out_path = Path::new(&args.out_dir).join(format!("{}{}", args.bundle_name, args.dst_ext));
     let mut out_file = File::create(&out_path)?;
     
@@ -110,7 +112,13 @@ fn should_include_file(file_path: &Path, patterns: &[String], base_dir: &Path) -
     for pattern in patterns {
         let is_exclude = pattern.starts_with('!');
         let pattern = pattern.trim_start_matches('!');
-        let full_pattern = base_dir.join(pattern).to_string_lossy().into_owned();
+        let full_pattern =  base_dir.join(pattern).to_string_lossy().into_owned();
+        let final_path = if Path::new("." )== base_dir || base_dir == Path::new("./") {
+            relative_path
+        } else {
+            file_path
+        };
+
         let options = MatchOptions {
             case_sensitive: false,
             require_literal_separator: false,
@@ -118,7 +126,7 @@ fn should_include_file(file_path: &Path, patterns: &[String], base_dir: &Path) -
         };
         match glob_with(&full_pattern, options) {
             Ok(mut paths) => {
-                let matched = paths.any(|p| p.as_ref().map_or(false, |p| p == file_path));
+                let matched = paths.any(|p| p.as_ref().map_or(false, |p| p == final_path));
                 if is_exclude && matched {
                     return false;
                 } else if !is_exclude && matched {
