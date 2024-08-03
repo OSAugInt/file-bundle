@@ -34,16 +34,16 @@ DESCRIPTION:
 
 EXAMPLES:
     1. Bundle all .txt files in the current directory:
-       file_bundle -g '*.txt'
+       fbundle -g '*.txt'
 
     2. Bundle .rs files, excluding test files, from a specific directory:
-       file_bundle -s ./src -g '**/*.rs' -g '!**/*_test.rs'
+       fbundle -s ./src -g '**/*.rs' -g '!**/*_test.rs'
 
     3. Create a bundle with a custom name and separator:
-       file_bundle -n 'my_bundle' -f '---FILE---' -g '**/*.md'
+       fbundle -n 'my_bundle' -f '---FILE---' -g '**/*.md'
 
     4. Bundle files with multiple include and exclude patterns:
-       file_bundle -g '**/*.{js,ts}' -g '!**/node_modules/**' -g '!**/dist/**'
+       fbundle -g '**/*.{js,ts}' -g '!**/node_modules/**' -g '!**/dist/**'
 
 NOTE:
     Glob patterns are case-insensitive by default. The tool uses the 'ignore' crate for
@@ -110,14 +110,15 @@ fn should_include_file(file_path: &Path, patterns: &[String], base_dir: &Path) -
     for pattern in patterns {
         let is_exclude = pattern.starts_with('!');
         let pattern = pattern.trim_start_matches('!');
+        let full_pattern = base_dir.join(pattern).to_string_lossy().into_owned();
         let options = MatchOptions {
             case_sensitive: false,
             require_literal_separator: false,
             require_literal_leading_dot: false,
         };
-        match glob_with(pattern, options) {
+        match glob_with(&full_pattern, options) {
             Ok(mut paths) => {
-                let matched = paths.any(|p| p.as_ref().map_or(false, |p| p == relative_path));
+                let matched = paths.any(|p| p.as_ref().map_or(false, |p| p == file_path));
                 if is_exclude && matched {
                     return false;
                 } else if !is_exclude && matched {
