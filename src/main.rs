@@ -1,14 +1,20 @@
-use std::fs::{self, File};
-use std::io::{self, Write};
-use std::path::{Path, PathBuf};
+use std::fs::File;
+use std::io::{self, BufWriter, Read, Write};
+use std::path::PathBuf;
+use std::sync::Mutex;
 
 use clap::Parser;
-use glob::{glob_with, MatchOptions};
+use ignore::overrides::OverrideBuilder;
 use ignore::WalkBuilder;
 use serde::Deserialize;
+use rayon::prelude::*;
 
 #[derive(Debug, Deserialize, Parser)]
-#[command(author, version, about, long_about = "
+#[command(
+    author,
+    version,
+    about,
+    long_about = "
 FileBundle - A utility for bundling multiple files into a single output file.
 
 USAGE:
@@ -23,6 +29,7 @@ OPTIONS:
     -g, --src-globs <PATTERNS>  Provide one or more glob patterns to match source files
                                 Use '!' prefix for exclusion patterns
                                 Can be specified multiple times for multiple patterns
+    -v, --verbose               Enable verbose output
 
 DESCRIPTION:
     This tool bundles multiple files into a single output file. It recursively searches
@@ -47,25 +54,29 @@ EXAMPLES:
 
 NOTE:
     Glob patterns are case-insensitive by default. The tool uses the 'ignore' crate for
-    efficient file traversal and the 'glob' crate for pattern matching.")]
+    efficient file traversal and the 'glob' crate for pattern matching."
+)]
 struct FileBundle {
     #[arg(short = 'n', long, default_value = "file_bundle")]
     bundle_name: String,
-    
+
     #[arg(short = 's', long, default_value = ".")]
-    src_dir: String,
-    
+    src_dir: PathBuf,
+
     #[arg(short = 'o', long, default_value = ".")]
-    out_dir: String,
-    
+    out_dir: PathBuf,
+
     #[arg(short = 'e', long, default_value = ".txt")]
     dst_ext: String,
-    
+
     #[arg(short = 'f', long)]
     file_sep: String,
-    
+
     #[arg(short = 'g', long)]
     src_globs: Vec<String>,
+
+    #[arg(short = 'v', long, default_value_t = false)]
+    verbose: bool,
 }
 
 fn main() -> io::Result<()> {
@@ -73,71 +84,63 @@ fn main() -> io::Result<()> {
     
     args.file_sep = args.file_sep.replace("\\n", "\n");
 
-    let out_path = Path::new(&args.out_dir).join(format!("{}{}", args.bundle_name, args.dst_ext));
-    let mut out_file = File::create(&out_path)?;
+    let out_path = args.out_dir.join(format!("{}{}", args.bundle_name, args.dst_ext));
+    let writer = Mutex::new(BufWriter::new(File::create(&out_path)?));
     
-    let src_dir = Path::new(&args.src_dir);
-    let mut walker = WalkBuilder::new(src_dir);
-    
-    for glob_pattern in &args.src_globs {
-        if glob_pattern.starts_with('!') {
-            walker.add_ignore(glob_pattern.trim_start_matches('!'));
-        } else {
-            walker.add_custom_ignore_filename(&glob_pattern);
-        }
+    if args.verbose {
+        println!("Glob patterns: {:?}", args.src_globs);
     }
 
-    for result in walker.build() {
-        match result {
-            Ok(entry) => {
-                if entry.file_type().map_or(false, |ft| ft.is_file()) {
-                    let path = entry.path();
-                    if should_include_file(path, &args.src_globs, src_dir) {
-                        write!(out_file, "{} {}\n", args.file_sep, path.display())?;
-                        let contents = fs::read_to_string(path)?;
-                        write!(out_file, "{}\n", contents)?;
-                    }
-                }
-            }
-            Err(e) => println!("Error: {}", e),
-        }
+    let mut override_builder = OverrideBuilder::new(&args.src_dir);
+    for pattern in &args.src_globs {
+        override_builder.add(pattern).map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
     }
+    let overrides = override_builder.build().map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+
+    let walker = WalkBuilder::new(&args.src_dir)
+        .hidden(false)
+        .ignore(false)
+        .git_ignore(false)
+        .overrides(overrides)
+        .build();
+    
+    let files: Vec<_> = walker
+        .filter_map(Result::ok)
+        .filter(|entry| entry.file_type().map_or(false, |ft| ft.is_file()))
+        .collect();
+
+    if args.verbose {
+        println!("Total files to process: {}", files.len());
+    }
+
+    files.par_iter().try_for_each(|entry| -> io::Result<()> {
+        let path = entry.path();
+        
+        if args.verbose {
+            println!("Processing file: {}", path.display());
+        }
+
+        let mut file = File::open(path)?;
+        let mut contents = Vec::new();
+        file.read_to_end(&mut contents)?;
+
+        let file_content = match String::from_utf8(contents.clone()) {
+            Ok(s) => s,
+            Err(_) => {
+                eprintln!("Warning: File {} is not valid UTF-8. Skipping content.", path.display());
+                String::new()
+            }
+        };
+
+        let output = format!("{} {}\n{}\n", args.file_sep, path.display(), file_content);
+        
+        let mut writer = writer.lock().unwrap();
+        writer.write_all(output.as_bytes())?;
+        Ok(())
+    })?;
+    
+    writer.lock().unwrap().flush()?;
     
     println!("Bundle created at: {}", out_path.display());
     Ok(())
-}
-
-fn should_include_file(file_path: &Path, patterns: &[String], base_dir: &Path) -> bool {
-    let relative_path = file_path.strip_prefix(base_dir).unwrap_or(file_path);
-    for pattern in patterns {
-        let is_exclude = pattern.starts_with('!');
-        let pattern = pattern.trim_start_matches('!');
-        let full_pattern =  base_dir.join(pattern).to_string_lossy().into_owned();
-        let final_path = if Path::new("." )== base_dir || base_dir == Path::new("./") {
-            relative_path
-        } else {
-            file_path
-        };
-
-        let options = MatchOptions {
-            case_sensitive: false,
-            require_literal_separator: false,
-            require_literal_leading_dot: false,
-        };
-        match glob_with(&full_pattern, options) {
-            Ok(mut paths) => {
-                let matched = paths.any(|p| p.as_ref().map_or(false, |p| p == final_path));
-                if is_exclude && matched {
-                    return false;
-                } else if !is_exclude && matched {
-                    return true;
-                }
-            }
-            Err(e) => {
-                eprintln!("Error in glob pattern '{}': {}", pattern, e);
-                continue;
-            }
-        }
-    }
-    false
 }
