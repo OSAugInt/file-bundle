@@ -1,11 +1,10 @@
 [package]
 name = "fbundle"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2021"
 
 [dependencies]
 clap = { version = "4.3", features = ["derive"] }
-glob = "0.3"
 ignore = "0.4"
 serde = { version = "1.0", features = ["derive"] }
 rayon = "1.10.0"
