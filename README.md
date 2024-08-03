@@ -42,6 +42,7 @@ fbundle [OPTIONS] -f <FILE_SEPERATOR> -g <GLOB_PATTERN>...
 - `-e, --dst-ext <EXT>`: Set the file extension for the output bundle file (default: '.txt')
 - `-f, --file-sep <SEP>`: Specify a custom separator string to use between files in the bundle
 - `-g, --src-globs <PATTERNS>`: Provide one or more glob patterns to match source files. Use '!' prefix for exclusion patterns. Can be specified multiple times for multiple patterns.
+- `v, --verbose`: Enable verbose output
 
 ## Examples
 
